@@ -1,8 +1,7 @@
 const Category = require("../models/category");
 const Course = require("../models/Course");
 
-//Creating Tag handler function
-
+//Creating createCategory function
 exports.createCategory = async(req,res) =>{
     try{
         // fetch data
@@ -33,10 +32,14 @@ exports.createCategory = async(req,res) =>{
 	}
 }
 
-// getAllTags handler function
+// getAllCategory Courses handler function
 exports.showAllCategory =  async (req,res) =>{
     try{
-      const allTags  = await Tag.find({},{name:true, description:true});
+      const allCategories  = await Category.find(
+		{},
+		{name:true, 
+		description:true}
+	);
       res.status(200).json({
         success:true,
         data: allCategories,
@@ -48,17 +51,19 @@ exports.showAllCategory =  async (req,res) =>{
             message:error.message,
         });
     }
-}
+};
 
-//category Page Details+
+//category Page Details
 exports.categoryPageDetails = async (req, res) => {
 	try {
         // get Category ID
 		const { categoryId } = req.body;
 
 		// Get courses for the specified category
-		const selectedCategory = await Category.findById(categoryId)          //populate instuctor and rating and reviews from courses
-			.populate({path:"courses",match:{status:"Published"},populate:([{path:"instructor"},{path:"ratingAndReviews"}])})
+		const selectedCategory = await Category.findById(categoryId)          
+			.populate({path:"courses",
+			match:{status:"Published"},
+			populate:([{path:"instructor"},{path:"ratingAndReviews"}])})
 			.exec();
 		 console.log(selectedCategory);
 		// validation
@@ -66,9 +71,11 @@ exports.categoryPageDetails = async (req, res) => {
 			console.log("Category not found.");
 			return res
 				.status(404)
-				.json({ success: false, message: "Category not found" });
+				.json({ success: false, 
+					message: "Category not found" 
+				});
 		}
-		// Handle the case when there are no courses
+		// what if there are no courses in such categories
 		if (selectedCategory.courses.length === 0) {
 			console.log("No courses found for the selected category.");
 			return res.status(404).json({
@@ -109,3 +116,44 @@ exports.categoryPageDetails = async (req, res) => {
 		});
 	}
 };
+
+//add course to category
+exports.addCourseToCategory = async (req, res) => {
+	const { courseId, categoryId } = req.body;
+	console.log("category id", categoryId);
+	try {
+		const category = await Category.findById(categoryId);
+		if (!category) {
+			return res.status(404).json({
+				success: false,
+				message: "Category not found",
+			});
+		}
+		const course = await Course.findById(courseId);
+		if (!course) {
+			return res.status(404).json({
+				success: false,
+				message: "Course not found",
+			});
+		}
+		if(category.courses.includes(courseId)){
+			return res.status(200).json({
+				success: true,
+				message: "Course already exists in the category",
+			});
+		}
+		category.courses.push(courseId);
+		await category.save();
+		return res.status(200).json({
+			success: true,
+			message: "Course added to category successfully",
+		});
+	}
+	catch (error) {
+		return res.status(500).json({
+			success: false,
+			message: "Internal server error",
+			error: error.message,
+		});
+	}
+}
