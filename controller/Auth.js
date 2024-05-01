@@ -5,6 +5,8 @@ const otpGenerator = require("otp-generator");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const Profile = require("../models/Profile");
+const mailSender = require("../utils/mailSender");
+const { passwordUpdated } = require("../mail/templates/passwordUpdate");
 require("dotenv").config();
 
 //sendOTP
@@ -30,23 +32,22 @@ exports.sendOTP = async (req,res) =>{
         specialChars:false,
     })
     console.log("OTP generated: ", otp);
-
     // check unique otp or not
     const result = await OTP.findOne({otp: otp});
+    console.log("Result is Generate OTP Func");
+	console.log("OTP", otp);
+	console.log("Result", result);
     while(result) {
         otp = otpGenerator(6, {
         upperCaseAlphabets:false,
         lowerCaseAlphabets:false,
         specialChars:false,
         });
-        result = await OTP.findOne({otp: otp});
     }
-
     const otpPayload = {email,otp};
-
     // create an entry for OTP
     const otpBody = await OTP.create(otpPayload);
-    console.log(otpBody);
+    console.log("OTP Body",otpBody);
 
     // return response successfully 
     res.status(200).json({
@@ -54,14 +55,13 @@ exports.sendOTP = async (req,res) =>{
         message:'OTP Sent Successfully',
         otp,
     })
-
     }
     catch(error) {
        console.log(error);
        return res.status(500).json({
         success:false,
-        message:error.message,
-       })
+        error:error.message,
+       });
     }
 };
 
@@ -80,13 +80,13 @@ exports.signUp = async (req,res) => {
             contactNumber,
             otp
         } = req.body;
-    
+
         // validating data 
         if(!firstName || !lastName || !email || !password || !confirmPassword ||!otp){
             return res.status(403).json({
                 success:false,
                 message:"All fields are required"
-            })
+            });
         }
         
         //matching of password and confirm password if they are same or not
@@ -102,7 +102,7 @@ exports.signUp = async (req,res) => {
         if(existingUser) {
             return res.status(400).json({
                 success:false,
-                message:"User is already registered"
+                message:"User already exists. Please sign in to continue."
             })
         }
     
@@ -126,7 +126,9 @@ exports.signUp = async (req,res) => {
     
          // Hash Password
          const hashedPassword = await bcrypt.hash(password, 10);
-    
+         // Create the user
+		let approved = "";
+		approved === "Instructor" ? (approved = false) : (approved = true)
          // create entry in DB
          const profileDetails = await Profile.create({
             gender:null,
@@ -148,8 +150,8 @@ exports.signUp = async (req,res) => {
 
          return res.status(200).json({
             success:true,
-            message:'User is registered Successfully',
             user,
+            message:'User registered Successfully',
          })
     }
     catch(error){
@@ -167,32 +169,33 @@ exports.login = async(req,res) =>{
         //get data from req body
         const {email,password} = req.body;
         // validation data 
-        if(!email || !response) {
-           return res.status(403).json({
+        if(!email || !password) {
+           return res.status(400).json({
             success:false,
-            message: 'All fields are required, please try again',
-           })
+            message: 'Please fill up all the required feilds',
+           });
         }
         //User check exist or not
         const user = await User.findOne({email}). populate("additionalDetails");
         if(!user) {
             return res.status(401).json({
                 success:false,
-                message: 'User is not registered, please signup first',
+                message: 'User is not registered, please signup to continue',
             })
         } 
 
         //generate JWT, after password matching
         if(await bcrypt.compare(password, user.password)){
-            const payload = {
-                email: user.email,
-                id: user._id,
-                accountType:user.accountType,
-
-            }
-         const token = jwt.sign(payload, process.env.JWT_SECRET,{
-            expiresIn:"2h",
-         });
+            const token = jwt.sign(
+				{ email: user.email, 
+                  id: user._id, 
+                  accountType: user.accountType 
+                },
+				process.env.JWT_SECRET,
+				{
+					expiresIn: "24h",
+				}
+			);
          user.token = token;
          user.password = undefined;
 
@@ -229,5 +232,77 @@ exports.login = async(req,res) =>{
 
 //changePassword 
 exports.changePassword = async(rea,res) => {
-    //get data from req body
-}
+    try{
+          //get data from req body
+          const userDetails = await User.findById(req.user.id);
+          // get old password , new Password and confirm new password from request body
+          const { oldPassword, newPassword, confirmNewPassword } = req.body;
+
+          // validation 
+          const isPasswordMatch = await bcrypt.compare(
+			oldPassword,
+			userDetails.password,
+		);
+		if(oldPassword === newPassword){
+			return res.status(400).json({
+				success: false,
+				message: "New Password cannot be same as Old Password",
+			});
+		}
+        // while comparing what if old password do not matches
+        if (!isPasswordMatch) {
+			return res
+				.status(401)
+				.json({ success: false, message: "The password is incorrect"});
+		}
+        // what if newPassword and confirmNew Password do not matches
+        if (newPassword !== confirmNewPassword) {
+			return res.status(400).json({
+				success: false,
+				message: "The password and confirm password does not match",
+			});
+		}
+
+		// Updating the password
+		const encryptedPassword = await bcrypt.hash(newPassword, 10);
+		const updatedUserDetails = await User.findByIdAndUpdate(
+			req.user.id,
+			{ password: encryptedPassword },
+			{ new: true }
+		);
+        // aware user about his updated new password via sending mail notification
+        try {
+			const emailResponse = await mailSender(
+				updatedUserDetails.email,
+				"Study Notion - Password Updated",
+				passwordUpdated(
+					updatedUserDetails.email,
+					`Password updated successfully for ${updatedUserDetails.firstName} ${updatedUserDetails.lastName}`
+				)
+			);
+			console.log("Email sent successfully:", emailResponse.response);
+		} catch (error) {
+			// If there is an error sending the email
+			console.error("Error occurred while sending email:", error);
+			return res.status(500).json({
+				success: false,
+				message: "Error occurred while sending email",
+				error: error.message,
+			});
+		}
+        // return the response
+        return res.status(200).json({
+             success: true, 
+             message: "Password updated successfully" 
+        });
+    }
+    catch(error){
+        console.error("Error occurred while updating password:", error);
+		return res.status(500).json({
+			success: false,
+			message: "Error occurred while updating password",
+			error: error.message,
+		});     
+    }
+   
+};
