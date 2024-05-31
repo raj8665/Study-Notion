@@ -33,7 +33,7 @@ exports.createCategory = async(req,res) =>{
 }
 
 // getAllCategory Courses handler function
-exports.showAllCategory =  async (req,res) =>{
+exports.showAllCategories =  async (req,res) =>{
     try{
       const allCategories  = await Category.find(
 		{},
