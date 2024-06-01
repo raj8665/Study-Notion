@@ -1,6 +1,7 @@
 const User = require("../models/User");
 const mailSender = require("../utils/mailSender");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 
 // resetPasswordToken
 exports.resetPasswordToken = async(req,res) => {
@@ -53,10 +54,10 @@ exports.resetPassword = async(req,res)=> {
       // data fetch
     const {password,confirmPassword,token} = req.body;
     //validation 
-    if(password!==confirmPassword) {
+    if(confirmPassword!==password) {
         return res.json({
             success:false,
-            message:'Password not matching',
+            message:'Password and Confirm Password not matching',
         });
     }
     //get userdetails from db using token
@@ -65,21 +66,21 @@ exports.resetPassword = async(req,res)=> {
     if(!userDetails){
         return res.json({
             success:false,
-            message:'Token is invalid'
+            message:'Token is invalid',
         });
     }
     // token time check
-    if(userDetails.resetPasswordExpires<Date.now()){
-        return res.json({
+    if (!(userDetails.resetPasswordExpires > Date.now())){
+        return res.status(403).json({
             success:false,
-            message:'Token is expired, please regenerate your token',
+            message:'Token is expired, please regenerate your Token',
         })
     }
     //hash password
     const hashedPassword = await bcrypt.hash(password,10);
 
     //password update 
-    await User.findByIdAndUpdate(
+    await User.findOneAndUpdate(
         {token:token},
         {password:hashedPassword},
         {new:true},
@@ -87,14 +88,14 @@ exports.resetPassword = async(req,res)=> {
     //return response
     return res.status(200).json({
         success:true,
-        message:'Password reset successful',
+        message:'Password Reset Successful',
     })
     }
-    catch(error){
-       console.log(error);
-       return res.status(500).json({
-        success:false,
-        message:'Something went wrong while sending reset password mail',
-       })
-    }
+    catch (error) {
+		return res.json({
+			error: error.message,
+			success: false,
+			message: `Some Error in Updating the Password`,
+		});
+	}
 }
