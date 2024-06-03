@@ -13,6 +13,15 @@ exports.createSection = async (req, res) => {
 				message: "Missing required properties",
 			});
 		}
+		
+		const ifcourse= await Course.findById(courseId);
+		if (!ifcourse) {
+			return res.status(404).json({
+                success: false,
+                message: "Course not found",
+            });
+        }
+
 		// Create a new section with the given name
 		const newSection = await Section.create({ sectionName });
 
@@ -50,6 +59,26 @@ exports.createSection = async (req, res) => {
 	}
 };
 
+// DELETE a section
+exports.deleteSection = async (req, res) => {
+	try {
+		const { sectionId,courseId } = req.body;
+		await Section.findByIdAndDelete(sectionId);
+		const updatedCourse = await Course.findById(courseId).populate({ path: "courseContent", populate: { path: "subSection" } }).exec();
+		res.status(200).json({
+			success: true,
+			message: "Section deleted",
+			updatedCourse,
+		});
+	} catch (error) {
+		console.error("Error deleting section:", error);
+		res.status(500).json({
+			success: false,
+			message: "Internal server error",
+		});
+	}
+};
+
 // UPDATE a section
 exports.updateSection = async (req, res) => {
 	try {
@@ -69,26 +98,6 @@ exports.updateSection = async (req, res) => {
 		});
 	} catch (error) {
 		console.error("Error updating section:", error);
-		res.status(500).json({
-			success: false,
-			message: "Internal server error",
-		});
-	}
-};
-
-// DELETE a section
-exports.deleteSection = async (req, res) => {
-	try {
-		const { sectionId,courseId } = req.body;
-		await Section.findByIdAndDelete(sectionId);
-		const updatedCourse = await Course.findById(courseId).populate({ path: "courseContent", populate: { path: "subSection" } }).exec();
-		res.status(200).json({
-			success: true,
-			message: "Section deleted",
-			updatedCourse,
-		});
-	} catch (error) {
-		console.error("Error deleting section:", error);
 		res.status(500).json({
 			success: false,
 			message: "Internal server error",

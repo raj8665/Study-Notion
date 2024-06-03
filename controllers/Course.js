@@ -153,56 +153,44 @@ exports.getAllCourses = async (req, res) => {
 	}
 };
 
-// want to het all the course details
+// want to fetch all the course details
 exports.getCourseDetails = async (req,res)=>{
 	try {
-    // get id
-	const {courseId}=req.body;
-    // find Course details
-	const courseDetails=await Course.find(
-        {_id: courseId})
-        .populate(
-        {path:"instructor",
+		const {courseId}=req.body;
+	const courseDetails=await Course.find({_id: courseId}).populate({path:"instructor",
 	populate:{path:"additionalDetails"}})
 	.populate("category")
-	.populate({                
-        //only populate user name and image    
+	.populate({                    //only populate user name and image
 		path:"ratingAndReviews",
 		populate:{path:"user"
 		,select:"firstName lastName accountType image"}
 	})
-	.populate(
-    {path:"courseContent",
-    populate:{
-        path:"subSection",
-    }})
+	.populate({path:"courseContent",populate:{path:"subSection"}})
 	.exec();
-    // validation
+
 	if(!courseDetails){
 		return res.status(404).json({
             success:false,
-            message:"Course Not Found",
+            message:"Course Not Found"
         })
 	}
-    //return response 
 	return res.status(200).json({
         success:true,
 		message:"Course fetched successfully now",
-        data:courseDetails,
+        data:courseDetails
     });
 		
-	} 
-    catch (error) {
+	} catch (error) {
 		console.log(error);
         return res.status(404).json({
             success:false,
 			message:`Can't Fetch Course Data`,
-			error:error.message,
+			error:error.message
         })
+		
 	}
 
 }
-
 // To get all courses of a particular instructor
 exports.getInstructorCourses = async (req, res) => {
 	try {
